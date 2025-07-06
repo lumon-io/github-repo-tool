@@ -5,9 +5,16 @@ A polished Python tool to easily create and manage GitHub repositories from loca
 ## Features
 
 - **Dual Mode**: GUI interface or command-line operation
-- **Smart Git Management**: Automatically initializes Git repositories when needed
+- **Mac-Style Design**: Beautiful, modern interface with Apple-inspired colors and typography
+- **Comprehensive Git Management**: Full Git workflow with status, pull, push, commit
+- **Git Credential Management**: Configure username and email via UI
+- **GitHub Token Management**: Configure GitHub Personal Access Token for API access
+- **Smart Repository Setup**: Automatically initializes Git repositories when needed
 - **GitHub Integration**: Creates repositories and pushes code in one step
+- **Detailed GitHub Data**: View repository stats, commits, pull requests, and issues
 - **Repository Options**: Choose between public/private repositories with descriptions
+- **Real-time Status**: Detailed repository and file status with visual indicators
+- **File Management**: View modified, untracked, and staged files
 - **Easy Termination**: Multiple ways to exit the program (Ctrl+Q, Esc, menu)
 - **Progress Feedback**: Visual progress indicators and detailed status updates
 - **Quick Actions**: Open folders in explorer, open repositories in GitHub
@@ -37,7 +44,36 @@ gh auth login
 
 ## Usage
 
-### GUI Mode (Default)
+### Interactive Mode Selection
+
+When you run the program without arguments, it will detect your environment and ask you to choose:
+
+```bash
+python GitHubRepoSetup.py
+```
+
+**Example Output:**
+```
+    /\\
+   /  \\
+  /____\\
+  |    |
+  |NASA|
+  |    |
+ /|    |\\
+/_|____|_\\
+
+🚀 GitHub Repository Setup Tool
+========================================
+Choose your preferred mode:
+1. GUI Mode - Beautiful graphical interface
+2. CLI Mode - Command line interface
+3. Exit
+
+Enter your choice (1-3): 
+```
+
+### GUI Mode
 
 Run the program without arguments to launch the GUI:
 
@@ -46,14 +82,20 @@ python GitHubRepoSetup.py
 ```
 
 **GUI Features:**
+- **Beautiful Mac-Style Interface**: Apple-inspired design with modern colors and typography
 - Browse and select project folders
 - Choose repository visibility (Public/Private)
 - Add repository descriptions
-- Initialize Git repositories
+- **Git Credential Management**: Configure username and email through UI
+- **GitHub Token Management**: Configure Personal Access Token for API access
+- **Complete Git Workflow**: Initialize, status, add, commit, pull, push
+- **Real-time Status**: Shows repository info, branch, remote, commits ahead/behind
+- **File Status Panel**: Displays modified, untracked, and staged files
+- **Git Status Window**: Detailed git status in separate window
+- **GitHub Details Window**: View repository stats, commits, pull requests, issues
 - Create and push to GitHub
 - Open folders in file explorer
 - Open repositories in GitHub
-- Real-time status updates
 
 **Keyboard Shortcuts:**
 - `Ctrl+O`: Browse folder
@@ -79,6 +121,9 @@ python GitHubRepoSetup.py /path/to/your/project --no-push
 
 # Force GUI mode even with folder argument
 python GitHubRepoSetup.py /path/to/your/project --gui
+
+# Force CLI mode
+python GitHubRepoSetup.py --cli /path/to/your/project
 ```
 
 ### Command Line Options
@@ -87,7 +132,8 @@ python GitHubRepoSetup.py /path/to/your/project --gui
 - `--private`: Create private repository (default: public)
 - `--description, -d`: Repository description
 - `--no-push`: Don't push code after creation
-- `--gui`: Launch GUI mode
+- `--gui`: Force GUI mode
+- `--cli`: Force CLI mode
 
 ## Examples
 
@@ -96,10 +142,13 @@ python GitHubRepoSetup.py /path/to/your/project --gui
 # Navigate to your project folder
 cd /path/to/my-project
 
-# Create GitHub repository and push code
+# Interactive mode - choose GUI or CLI
+python GitHubRepoSetup.py
+
+# Or force CLI mode
 python GitHubRepoSetup.py .
 
-# Or use the GUI
+# Or force GUI mode
 python GitHubRepoSetup.py --gui
 ```
 
