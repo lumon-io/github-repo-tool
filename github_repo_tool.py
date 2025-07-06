@@ -19,7 +19,8 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QTextEdit, QComboBox,
     QProgressBar, QMessageBox, QFileDialog, QTabWidget,
     QGroupBox, QGridLayout, QSplitter, QFrame, QMenuBar,
-    QMenu, QStatusBar, QDialog, QFormLayout, QCheckBox, QInputDialog
+    QMenu, QStatusBar, QDialog, QFormLayout, QCheckBox, QInputDialog,
+    QToolButton, QToolTip
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QPalette, QColor, QAction, QIcon
@@ -99,23 +100,36 @@ class GitWorker(QThread):
         self.finished.emit(True, "\n".join(status_output))
 
 class GitHubTokenDialog(QDialog):
-    """Dialog for GitHub token configuration"""
+    """Dialog for GitHub token configuration with improved instructions"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("GitHub Token Configuration")
         self.setModal(True)
+        self.setGeometry(200, 200, 500, 400)
         self.setup_ui()
     
     def setup_ui(self):
         layout = QVBoxLayout()
         
+        # Title
+        title = QLabel("GitHub Personal Access Token")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title)
+        
         # Instructions
         instructions = QLabel(
-            "Enter your GitHub Personal Access Token.\n"
-            "This is required for creating repositories.\n\n"
-            "Get a token from: https://github.com/settings/tokens"
+            "A GitHub Personal Access Token is required to create repositories.\n\n"
+            "📋 How to get your token:\n"
+            "1. Go to https://github.com/settings/tokens\n"
+            "2. Click 'Generate new token (classic)'\n"
+            "3. Give it a name (e.g., 'GitHub Repo Tool')\n"
+            "4. Select 'repo' permissions\n"
+            "5. Click 'Generate token'\n"
+            "6. Copy the token (you won't see it again!)\n\n"
+            "🔒 Your token is stored securely in this app only."
         )
         instructions.setWordWrap(True)
+        instructions.setStyleSheet("background-color: #f0f0f0; padding: 10px; border-radius: 5px;")
         layout.addWidget(instructions)
         
         # Token entry
@@ -123,20 +137,29 @@ class GitHubTokenDialog(QDialog):
         token_layout.addWidget(QLabel("GitHub Token:"))
         self.token_edit = QLineEdit()
         self.token_edit.setEchoMode(QLineEdit.Password)
+        self.token_edit.setPlaceholderText("Paste your GitHub token here...")
         token_layout.addWidget(self.token_edit)
         layout.addLayout(token_layout)
         
         # Buttons
         button_layout = QHBoxLayout()
-        self.save_btn = QPushButton("Save")
+        self.save_btn = QPushButton("Save Token")
         self.save_btn.clicked.connect(self.accept)
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(self.save_btn)
+        self.help_btn = QPushButton("Open GitHub Tokens")
+        self.help_btn.clicked.connect(self.open_github_tokens)
+        button_layout.addWidget(self.help_btn)
+        button_layout.addStretch()
         button_layout.addWidget(self.cancel_btn)
+        button_layout.addWidget(self.save_btn)
         layout.addLayout(button_layout)
         
         self.setLayout(layout)
+    
+    def open_github_tokens(self):
+        """Open GitHub tokens page in browser"""
+        webbrowser.open("https://github.com/settings/tokens")
     
     def get_token(self):
         return self.token_edit.text()
@@ -202,6 +225,7 @@ class GitHubRepoTool(QMainWindow):
         self.current_folder = ""
         self.git_repo = None
         self.github_token = None
+        self.is_dark_mode = True
         self.setup_ui()
         self.setup_menu()
         self.apply_dark_theme()
@@ -217,8 +241,25 @@ class GitHubRepoTool(QMainWindow):
         # Main layout
         main_layout = QVBoxLayout(central_widget)
         
+        # Header with theme toggle
+        header_layout = QHBoxLayout()
+        title = QLabel("🚀 GitHub Repository Tool")
+        title.setStyleSheet("font-size: 18px; font-weight: bold;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        
+        # Theme toggle button
+        self.theme_btn = QToolButton()
+        self.theme_btn.setIcon(QIcon("🌙"))  # Moon for dark mode
+        self.theme_btn.setToolTip("Toggle light/dark mode")
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        self.theme_btn.setStyleSheet("QToolButton { border: none; font-size: 16px; }")
+        header_layout.addWidget(self.theme_btn)
+        
+        main_layout.addLayout(header_layout)
+        
         # Folder selection
-        folder_group = QGroupBox("Project Folder")
+        folder_group = QGroupBox("📁 Project Folder")
         folder_layout = QHBoxLayout()
         self.folder_edit = QLineEdit()
         self.folder_edit.setPlaceholderText("Select a project folder...")
@@ -226,65 +267,75 @@ class GitHubRepoTool(QMainWindow):
         
         self.browse_btn = QPushButton("Browse")
         self.browse_btn.clicked.connect(self.browse_folder)
+        self.browse_btn.setToolTip("Open folder browser to select your project directory")
         folder_layout.addWidget(self.browse_btn)
         
         folder_group.setLayout(folder_layout)
         main_layout.addWidget(folder_group)
         
         # GitHub token configuration
-        token_group = QGroupBox("GitHub Configuration")
+        token_group = QGroupBox("🔑 GitHub Configuration")
         token_layout = QHBoxLayout()
         self.token_status_label = QLabel("GitHub token not configured")
         token_layout.addWidget(self.token_status_label)
         
         self.configure_token_btn = QPushButton("Configure Token")
         self.configure_token_btn.clicked.connect(self.configure_github_token)
+        self.configure_token_btn.setToolTip("Set up your GitHub Personal Access Token for creating repositories")
         token_layout.addWidget(self.configure_token_btn)
         
         token_group.setLayout(token_layout)
         main_layout.addWidget(token_group)
         
         # Git operations
-        git_group = QGroupBox("Git Operations")
+        git_group = QGroupBox("🛠️ Git Operations")
         git_layout = QGridLayout()
         
         self.init_btn = QPushButton("Initialize Git")
         self.init_btn.clicked.connect(self.init_git)
+        self.init_btn.setToolTip("Start tracking your project with Git (creates .git folder)")
         git_layout.addWidget(self.init_btn, 0, 0)
         
         self.add_btn = QPushButton("Add All Files")
         self.add_btn.clicked.connect(self.add_files)
+        self.add_btn.setToolTip("Stage all files in your project for the next commit")
         git_layout.addWidget(self.add_btn, 0, 1)
         
         self.commit_btn = QPushButton("Commit Changes")
         self.commit_btn.clicked.connect(self.commit_changes)
+        self.commit_btn.setToolTip("Save your changes with a message (like a checkpoint)")
         git_layout.addWidget(self.commit_btn, 0, 2)
         
         self.pull_btn = QPushButton("Pull from GitHub")
         self.pull_btn.clicked.connect(self.pull_from_github)
+        self.pull_btn.setToolTip("Download latest changes from GitHub (if others made changes)")
         git_layout.addWidget(self.pull_btn, 1, 0)
         
         self.push_btn = QPushButton("Push to GitHub")
         self.push_btn.clicked.connect(self.push_to_github)
+        self.push_btn.setToolTip("Upload your changes to GitHub")
         git_layout.addWidget(self.push_btn, 1, 1)
         
         self.status_btn = QPushButton("Git Status")
         self.status_btn.clicked.connect(self.show_git_status)
+        self.status_btn.setToolTip("Show detailed information about your repository state")
         git_layout.addWidget(self.status_btn, 1, 2)
         
         git_group.setLayout(git_layout)
         main_layout.addWidget(git_group)
         
         # GitHub operations
-        github_group = QGroupBox("GitHub Operations")
+        github_group = QGroupBox("🐙 GitHub Operations")
         github_layout = QHBoxLayout()
         
         self.create_repo_btn = QPushButton("Create GitHub Repository")
         self.create_repo_btn.clicked.connect(self.create_github_repo)
+        self.create_repo_btn.setToolTip("Create a new repository on GitHub and upload your code")
         github_layout.addWidget(self.create_repo_btn)
         
         self.open_github_btn = QPushButton("Open in GitHub")
         self.open_github_btn.clicked.connect(self.open_in_github)
+        self.open_github_btn.setToolTip("Open your repository in a web browser")
         github_layout.addWidget(self.open_github_btn)
         
         github_group.setLayout(github_layout)
@@ -295,16 +346,38 @@ class GitHubRepoTool(QMainWindow):
         self.progress_bar.setVisible(False)
         main_layout.addWidget(self.progress_bar)
         
-        # Status display
+        # Enhanced status display
+        status_group = QGroupBox("📊 Project Status")
+        status_layout = QVBoxLayout()
+        
+        # Summary status
+        self.summary_label = QLabel("No project selected")
+        self.summary_label.setStyleSheet("font-weight: bold; color: #666; padding: 5px;")
+        status_layout.addWidget(self.summary_label)
+        
+        # Detailed status with better styling
         self.status_text = QTextEdit()
-        self.status_text.setMaximumHeight(200)
+        self.status_text.setMaximumHeight(150)
         self.status_text.setReadOnly(True)
-        main_layout.addWidget(self.status_text)
+        self.status_text.setStyleSheet("""
+            QTextEdit {
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                font-size: 11px;
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
+        status_layout.addWidget(self.status_text)
+        
+        status_group.setLayout(status_layout)
+        main_layout.addWidget(status_group)
         
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
+        self.status_bar.showMessage("Ready - Select a folder to get started")
     
     def setup_menu(self):
         menubar = self.menuBar()
@@ -369,6 +442,16 @@ class GitHubRepoTool(QMainWindow):
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
     
+    def toggle_theme(self):
+        """Toggle between light and dark themes"""
+        self.is_dark_mode = not self.is_dark_mode
+        if self.is_dark_mode:
+            self.theme_btn.setIcon(QIcon("🌙"))
+            self.apply_dark_theme()
+        else:
+            self.theme_btn.setIcon(QIcon("☀️"))
+            self.apply_light_theme()
+    
     def apply_dark_theme(self):
         """Apply a professional dark theme"""
         palette = QPalette()
@@ -388,6 +471,25 @@ class GitHubRepoTool(QMainWindow):
         
         self.setPalette(palette)
     
+    def apply_light_theme(self):
+        """Apply a clean light theme"""
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(240, 240, 240))
+        palette.setColor(QPalette.WindowText, QColor(0, 0, 0))
+        palette.setColor(QPalette.Base, QColor(255, 255, 255))
+        palette.setColor(QPalette.AlternateBase, QColor(245, 245, 245))
+        palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
+        palette.setColor(QPalette.ToolTipText, QColor(0, 0, 0))
+        palette.setColor(QPalette.Text, QColor(0, 0, 0))
+        palette.setColor(QPalette.Button, QColor(240, 240, 240))
+        palette.setColor(QPalette.ButtonText, QColor(0, 0, 0))
+        palette.setColor(QPalette.BrightText, QColor(255, 0, 0))
+        palette.setColor(QPalette.Link, QColor(0, 0, 255))
+        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        
+        self.setPalette(palette)
+    
     def configure_github_token(self):
         """Configure GitHub token"""
         dialog = GitHubTokenDialog(self)
@@ -401,7 +503,7 @@ class GitHubRepoTool(QMainWindow):
                     if response.status_code == 200:
                         user_data = response.json()
                         self.github_token = token
-                        self.token_status_label.setText(f"Token configured for: {user_data['login']}")
+                        self.token_status_label.setText(f"✅ Token configured for: {user_data['login']}")
                         QMessageBox.information(self, "Success", f"GitHub token configured successfully!\nAuthenticated as: {user_data['login']}")
                     else:
                         QMessageBox.critical(self, "Error", "Invalid GitHub token. Please check your token and try again.")
@@ -417,22 +519,64 @@ class GitHubRepoTool(QMainWindow):
             self.update_status()
     
     def update_status(self):
-        """Update the status display"""
+        """Update the status display with better summarization"""
         if not self.current_folder:
-            self.status_text.setText("No folder selected")
+            self.summary_label.setText("No project selected")
+            self.status_text.setText("Select a folder to see project status")
             return
         
         try:
             self.git_repo = git.Repo(self.current_folder)
             status = self.get_git_status()
+            summary = self.get_status_summary()
+            self.summary_label.setText(summary)
             self.status_text.setText(status)
         except git.exc.InvalidGitRepositoryError:
-            self.status_text.setText("Not a Git repository. Click 'Initialize Git' to start.")
+            self.summary_label.setText("📁 Not a Git repository")
+            self.status_text.setText("This folder is not tracked by Git.\n\nClick 'Initialize Git' to start tracking your project.")
         except Exception as e:
-            self.status_text.setText(f"Error: {str(e)}")
+            self.summary_label.setText("❌ Error")
+            self.status_text.setText(f"Error reading project: {str(e)}")
+    
+    def get_status_summary(self):
+        """Get a user-friendly status summary"""
+        if not self.git_repo:
+            return "No repository"
+        
+        try:
+            # Basic info
+            branch = self.git_repo.active_branch.name
+            has_remote = bool(self.git_repo.remotes)
+            
+            # Status indicators
+            is_dirty = self.git_repo.is_dirty()
+            modified_count = len([item.a_path for item in self.git_repo.index.diff(None)])
+            untracked_count = len(self.git_repo.untracked_files)
+            
+            # Build summary
+            summary_parts = []
+            summary_parts.append(f"🌿 Branch: {branch}")
+            
+            if has_remote:
+                summary_parts.append("🌐 Connected to GitHub")
+            else:
+                summary_parts.append("🌐 No GitHub connection")
+            
+            if is_dirty:
+                if modified_count > 0:
+                    summary_parts.append(f"📝 {modified_count} modified files")
+                if untracked_count > 0:
+                    summary_parts.append(f"🆕 {untracked_count} new files")
+            else:
+                summary_parts.append("✅ All changes saved")
+            
+            return " | ".join(summary_parts)
+            
+        except Exception:
+            return "Status unknown"
     
     def get_git_status(self):
-        """Get detailed Git status"""
+        """Get detailed Git status with better formatting"""
         if not self.git_repo:
             return "No repository"
         
@@ -706,7 +850,7 @@ class GitHubRepoTool(QMainWindow):
     
     def show_about(self):
         """Show about dialog"""
-        about_text = """GitHub Repository Tool v2.0
+        about_text = """GitHub Repository Tool v2.1
 
 A self-contained PySide6-based tool for creating and managing GitHub repositories.
 
@@ -716,8 +860,9 @@ Features:
 • Push/pull from GitHub
 • Create GitHub repositories via API
 • View detailed Git status
-• Professional dark theme interface
+• Professional dark/light theme interface
 • No external CLI dependencies required
+• User-friendly interface with tooltips
 
 Requirements:
 • Python with GitPython and requests libraries
