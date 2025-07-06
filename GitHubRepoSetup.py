@@ -1235,111 +1235,39 @@ def prompt_user_mode():
                 print("\n👋 Goodbye!")
                 return "exit"
 
-def pick_folder_textual():
-    """Launch a Textual TUI folder picker and return the selected folder path."""
-    from textual.app import App, ComposeResult
-    from textual.widgets import DirectoryTree, Footer, Header, Button, Static, Input
-    from textual.containers import Container, Horizontal
-    from textual.reactive import reactive
-
-    class FolderPickerApp(App):
-        CSS = '''
-        #main-container { padding: 1 2; }
-        #current-path { color: cyan; padding: 0 1; }
-        #error-msg { color: red; padding: 0 1; }
-        #input-row { padding: 1 0; }
-        #button-row { padding: 1 0; }
-        '''
-        selected_folder = reactive(None)
-        error_message = reactive("")
-        def __init__(self):
-            super().__init__()
-            self.current_root = os.path.abspath(os.sep)
-        def compose(self) -> ComposeResult:
-            yield Header()
-            with Container(id="main-container"):
-                yield Static(f"Current: {self.current_root}", id="current-path")
-                yield Static("", id="error-msg")
-                with Horizontal(id="input-row"):
-                    yield Input(placeholder="Type or paste a path and press Enter", id="path-input")
-                    yield Button("Go Home", id="home-btn")
-                yield DirectoryTree(self.current_root, id="tree")
-                with Horizontal(id="button-row"):
-                    yield Button("⬆️ Go Up", id="up-btn")
-                    yield Button("Select", id="select-btn")
-            yield Footer()
-        def on_mount(self):
-            self.update_path_label()
-            self.query_one("#path-input", Input).value = self.current_root
-        def update_path_label(self):
-            label = self.query_one("#current-path", Static)
-            label.update(f"Current: {self.current_root}")
-        def show_error(self, msg):
-            self.error_message = msg
-            self.query_one("#error-msg", Static).update(msg)
-        def clear_error(self):
-            self.error_message = ""
-            self.query_one("#error-msg", Static).update("")
-        def reload_tree(self, new_root):
-            self.current_root = new_root
-            container = self.query_one("#main-container", Container)
-            old_tree = self.query_one("#tree", DirectoryTree)
-            container.remove(old_tree)
-            new_tree = DirectoryTree(new_root, id="tree")
-            container.mount(new_tree, after="#input-row")
-            self.update_path_label()
-            self.query_one("#path-input", Input).value = new_root
-            self.clear_error()
-        def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected):
-            if os.path.isdir(event.path):
-                self.selected_folder = event.path
-                self.exit(event.path)
-        def on_button_pressed(self, event):
-            if event.button.id == "up-btn":
-                parent = os.path.dirname(self.current_root)
-                if parent and parent != self.current_root:
-                    self.reload_tree(parent)
-            elif event.button.id == "home-btn":
-                home = os.path.expanduser("~")
-                if os.path.isdir(home):
-                    self.reload_tree(home)
-            elif event.button.id == "select-btn":
-                tree = self.query_one("#tree", DirectoryTree)
-                node = tree.cursor_node
-                if node and os.path.isdir(node.path):
-                    self.selected_folder = node.path
-                    self.exit(node.path)
-        def on_input_submitted(self, event: Input.Submitted):
-            path = event.value.strip()
-            if os.path.isdir(path):
-                self.reload_tree(path)
+def pick_folder_inquirerpy():
+    """Use InquirerPy to pick a folder in a simple, user-friendly TUI. Defaults to home directory and handles permission errors."""
+    from InquirerPy import inquirer as inquirerpy_inquirer
+    import os
+    home = os.path.expanduser("~")
+    while True:
+        try:
+            folder = inquirerpy_inquirer.filepath(
+                message="Select your project folder:",
+                only_directories=True,
+                validate=lambda p: os.path.isdir(p),
+                instruction="Use arrows to navigate, type to search, Tab to autocomplete, Enter to select, Esc to cancel, / to show folder list.",
+                default=home
+            ).execute()
+            if folder and os.path.isdir(folder):
+                return folder
             else:
-                self.show_error(f"❌ '{path}' is not a valid directory.")
-    app = FolderPickerApp()
-    folder = app.run()
-    return folder
+                print("❌ No folder selected or invalid directory. Please try again.")
+        except (PermissionError, OSError):
+            print("⚠️ Some folders could not be listed due to permissions. Please select a different folder.")
+            continue
 
 def prompt_for_folder_cli():
-    """Prompt the user for a folder path in CLI mode using Textual's file browser if available."""
-    if TEXTUAL_AVAILABLE:
+    """Prompt the user for a folder path in CLI mode using InquirerPy if available, then Textual, then questionary/manual as fallback."""
+    if INQUIRERPY_AVAILABLE:
+        return pick_folder_inquirerpy()
+    elif TEXTUAL_AVAILABLE:
         folder = pick_folder_textual()
         if folder and os.path.isdir(folder):
             return folder
         else:
             print("❌ No folder selected or invalid directory. Please try again.")
             return prompt_for_folder_cli()
-    elif INQUIRERPY_AVAILABLE:
-        while True:
-            folder = inquirerpy_inquirer.filepath(
-                message="Select your project folder:",
-                only_directories=True,
-                validate=lambda p: os.path.isdir(p),
-                instruction="Use arrows to navigate, Enter to select, type to search, [F2] to create folder"
-            ).execute()
-            if folder and os.path.isdir(folder):
-                return folder
-            else:
-                print("❌ No folder selected or invalid directory. Please try again.")
     elif QUESTIONARY_AVAILABLE:
         while True:
             folder = questionary.path(
