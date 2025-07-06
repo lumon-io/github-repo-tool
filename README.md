@@ -22,8 +22,8 @@ A polished Python tool to easily create and manage GitHub repositories from loca
 ## Requirements
 
 - Python 3.6+
-- Git installed and configured
-- GitHub CLI (gh) installed and authenticated
+- GitPython and requests libraries (included in requirements.txt)
+- GitHub Personal Access Token (configured in the app)
 
 ## Installation
 
@@ -32,20 +32,11 @@ A polished Python tool to easily create and manage GitHub repositories from loca
 pip install -r requirements.txt
 ```
 
-2. Install GitHub CLI:
-   - **Windows**: Download from https://cli.github.com/
-   - **macOS**: `brew install gh`
-   - **Linux**: Follow instructions at https://cli.github.com/
-
-3. Authenticate with GitHub:
-```bash
-gh auth login
-```
-
-4. Install optional dependencies:
-```bash
-pip install pillow questionary InquirerPy textual
-```
+2. Get a GitHub Personal Access Token:
+   - Go to https://github.com/settings/tokens
+   - Click "Generate new token (classic)"
+   - Select "repo" permissions
+   - Copy the token (you'll need it for the app)
 
 ## Usage
 
@@ -82,14 +73,12 @@ python github_repo_tool.py
 - Browse and select project folders
 - Choose repository visibility (Public/Private)
 - Add repository descriptions
-- **Git Credential Management**: Configure username and email through UI
 - **GitHub Token Management**: Configure Personal Access Token for API access
 - **Complete Git Workflow**: Initialize, status, add, commit, pull, push
 - **Real-time Status**: Shows repository info, branch, remote, commits ahead/behind
 - **File Status Panel**: Displays modified, untracked, and staged files
 - **Git Status Window**: Detailed git status in separate window
-- **GitHub Details Window**: View repository stats, commits, pull requests, issues
-- Create and push to GitHub
+- Create and push to GitHub via API
 - Open folders in file explorer
 - Open repositories in GitHub
 
@@ -181,20 +170,21 @@ The program includes comprehensive error handling for:
 
 ### Common Issues
 
-1. **"Git is not installed"**
-   - Install Git from https://git-scm.com/
+1. **"GitPython not found"**
+   - Install dependencies: `pip install -r requirements.txt`
 
-2. **"GitHub CLI not found"**
-   - Install GitHub CLI from https://cli.github.com/
-   - Run `gh auth login` to authenticate
+2. **"Invalid GitHub token"**
+   - Get a new token from https://github.com/settings/tokens
+   - Ensure it has "repo" permissions
+   - Configure the token in the app
 
-3. **"Authentication failed"**
-   - Run `gh auth login` and follow the prompts
-   - Ensure you have proper GitHub permissions
-
-4. **"Repository already exists"**
+3. **"Repository already exists"**
    - The repository name conflicts with an existing one
    - Rename your folder or use a different name
+
+4. **"Network error"**
+   - Check your internet connection
+   - Verify the GitHub API is accessible
 
 ### Getting Help
 
@@ -205,9 +195,17 @@ The program includes comprehensive error handling for:
 ## Development
 
 The program is structured as a class-based application with:
-- `GitHubRepoSetup`: Main GUI class
-- `run_command_line()`: Command-line functionality
-- `main()`: Entry point with argument parsing
+- `GitHubRepoTool`: Main GUI class
+- `GitWorker`: Background worker for Git operations
+- `GitHubTokenDialog`: Token configuration dialog
+- `GitHubRepoDialog`: Repository creation dialog
+- `main()`: Entry point
+
+**Key Features:**
+- **Self-contained**: No external CLI dependencies
+- **GitPython**: Pure Python Git operations
+- **GitHub API**: Direct API integration
+- **Cross-platform**: Works on Windows, macOS, Linux
 
 ## License
 

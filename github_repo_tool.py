@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
 GitHub Repository Tool
-A modern PySide6-based tool for creating and managing GitHub repositories.
+A self-contained PySide6-based tool for creating and managing GitHub repositories.
+No external CLI dependencies required - uses GitPython and GitHub API.
 """
 
 import sys
 import os
-import subprocess
 import git
 import requests
 import json
+import webbrowser
 from datetime import datetime
 from typing import Optional, Dict, List
 
@@ -24,7 +25,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QPalette, QColor, QAction, QIcon
 
 class GitWorker(QThread):
-    """Background worker for Git operations"""
+    """Background worker for Git operations using GitPython"""
     progress = Signal(str)
     finished = Signal(bool, str)
     
@@ -53,40 +54,92 @@ class GitWorker(QThread):
     
     def _init_git(self):
         self.progress.emit("Initializing Git repository...")
-        os.chdir(self.folder)
-        subprocess.run(["git", "init"], check=True, capture_output=True)
+        repo = git.Repo.init(self.folder)
         self.finished.emit(True, "Git repository initialized successfully!")
     
     def _add_files(self):
         self.progress.emit("Adding files to staging...")
-        os.chdir(self.folder)
-        subprocess.run(["git", "add", "."], check=True, capture_output=True)
+        repo = git.Repo(self.folder)
+        repo.index.add("*")
         self.finished.emit(True, "Files added to staging!")
     
     def _commit_changes(self):
         commit_msg = self.kwargs.get("message", "Update")
         self.progress.emit(f"Committing changes: {commit_msg}")
-        os.chdir(self.folder)
-        subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
+        repo = git.Repo(self.folder)
+        repo.index.commit(commit_msg)
         self.finished.emit(True, "Changes committed successfully!")
     
     def _push_to_github(self):
         self.progress.emit("Pushing to GitHub...")
-        os.chdir(self.folder)
-        subprocess.run(["git", "push"], check=True, capture_output=True)
-        self.finished.emit(True, "Successfully pushed to GitHub!")
+        repo = git.Repo(self.folder)
+        if repo.remotes:
+            origin = repo.remote("origin")
+            origin.push()
+            self.finished.emit(True, "Successfully pushed to GitHub!")
+        else:
+            self.finished.emit(False, "No remote configured. Create a GitHub repository first.")
     
     def _pull_from_github(self):
         self.progress.emit("Pulling from GitHub...")
-        os.chdir(self.folder)
-        subprocess.run(["git", "pull"], check=True, capture_output=True)
-        self.finished.emit(True, "Successfully pulled from GitHub!")
+        repo = git.Repo(self.folder)
+        if repo.remotes:
+            origin = repo.remote("origin")
+            origin.pull()
+            self.finished.emit(True, "Successfully pulled from GitHub!")
+        else:
+            self.finished.emit(False, "No remote configured.")
     
     def _get_status(self):
         self.progress.emit("Getting Git status...")
-        os.chdir(self.folder)
-        result = subprocess.run(["git", "status"], capture_output=True, text=True, check=True)
-        self.finished.emit(True, result.stdout)
+        repo = git.Repo(self.folder)
+        status_output = []
+        status_output.append("=== Git Status ===")
+        status_output.append(repo.git.status())
+        self.finished.emit(True, "\n".join(status_output))
+
+class GitHubTokenDialog(QDialog):
+    """Dialog for GitHub token configuration"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("GitHub Token Configuration")
+        self.setModal(True)
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        
+        # Instructions
+        instructions = QLabel(
+            "Enter your GitHub Personal Access Token.\n"
+            "This is required for creating repositories.\n\n"
+            "Get a token from: https://github.com/settings/tokens"
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        # Token entry
+        token_layout = QHBoxLayout()
+        token_layout.addWidget(QLabel("GitHub Token:"))
+        self.token_edit = QLineEdit()
+        self.token_edit.setEchoMode(QLineEdit.Password)
+        token_layout.addWidget(self.token_edit)
+        layout.addLayout(token_layout)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(self.accept)
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(self.save_btn)
+        button_layout.addWidget(self.cancel_btn)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def get_token(self):
+        return self.token_edit.text()
 
 class GitHubRepoDialog(QDialog):
     """Dialog for GitHub repository creation"""
@@ -148,6 +201,7 @@ class GitHubRepoTool(QMainWindow):
         super().__init__()
         self.current_folder = ""
         self.git_repo = None
+        self.github_token = None
         self.setup_ui()
         self.setup_menu()
         self.apply_dark_theme()
@@ -176,6 +230,19 @@ class GitHubRepoTool(QMainWindow):
         
         folder_group.setLayout(folder_layout)
         main_layout.addWidget(folder_group)
+        
+        # GitHub token configuration
+        token_group = QGroupBox("GitHub Configuration")
+        token_layout = QHBoxLayout()
+        self.token_status_label = QLabel("GitHub token not configured")
+        token_layout.addWidget(self.token_status_label)
+        
+        self.configure_token_btn = QPushButton("Configure Token")
+        self.configure_token_btn.clicked.connect(self.configure_github_token)
+        token_layout.addWidget(self.configure_token_btn)
+        
+        token_group.setLayout(token_layout)
+        main_layout.addWidget(token_group)
         
         # Git operations
         git_group = QGroupBox("Git Operations")
@@ -282,6 +349,19 @@ class GitHubRepoTool(QMainWindow):
         push_action.triggered.connect(self.push_to_github)
         git_menu.addAction(push_action)
         
+        # GitHub menu
+        github_menu = menubar.addMenu("GitHub")
+        
+        token_action = QAction("Configure Token", self)
+        token_action.triggered.connect(self.configure_github_token)
+        github_menu.addAction(token_action)
+        
+        github_menu.addSeparator()
+        
+        create_repo_action = QAction("Create Repository", self)
+        create_repo_action.triggered.connect(self.create_github_repo)
+        github_menu.addAction(create_repo_action)
+        
         # Help menu
         help_menu = menubar.addMenu("Help")
         
@@ -307,6 +387,26 @@ class GitHubRepoTool(QMainWindow):
         palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
         
         self.setPalette(palette)
+    
+    def configure_github_token(self):
+        """Configure GitHub token"""
+        dialog = GitHubTokenDialog(self)
+        if dialog.exec() == QDialog.Accepted:
+            token = dialog.get_token()
+            if token:
+                # Test the token
+                headers = {"Authorization": f"token {token}"}
+                try:
+                    response = requests.get("https://api.github.com/user", headers=headers)
+                    if response.status_code == 200:
+                        user_data = response.json()
+                        self.github_token = token
+                        self.token_status_label.setText(f"Token configured for: {user_data['login']}")
+                        QMessageBox.information(self, "Success", f"GitHub token configured successfully!\nAuthenticated as: {user_data['login']}")
+                    else:
+                        QMessageBox.critical(self, "Error", "Invalid GitHub token. Please check your token and try again.")
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to validate token: {str(e)}")
     
     def browse_folder(self):
         """Open folder browser dialog"""
@@ -461,40 +561,78 @@ class GitHubRepoTool(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a folder first.")
             return
         
+        if not self.github_token:
+            QMessageBox.warning(self, "Warning", "Please configure GitHub token first.")
+            self.configure_github_token()
+            return
+        
         dialog = GitHubRepoDialog(self)
         if dialog.exec() == QDialog.Accepted:
             repo_info = dialog.get_repo_info()
             self.create_github_repository(repo_info)
     
     def create_github_repository(self, repo_info):
-        """Create GitHub repository using GitHub CLI"""
+        """Create GitHub repository using GitHub API"""
         try:
-            os.chdir(self.current_folder)
-            
             # Ensure Git is initialized
-            if not os.path.exists(".git"):
-                subprocess.run(["git", "init"], check=True, capture_output=True)
+            if not os.path.exists(os.path.join(self.current_folder, ".git")):
+                repo = git.Repo.init(self.current_folder)
+            else:
+                repo = git.Repo(self.current_folder)
             
             # Add and commit files
-            subprocess.run(["git", "add", "."], check=True, capture_output=True)
+            repo.index.add("*")
             try:
-                subprocess.run(["git", "commit", "-m", "Initial commit"], check=True, capture_output=True)
-            except subprocess.CalledProcessError:
+                repo.index.commit("Initial commit")
+            except git.exc.GitCommandError:
                 pass  # No changes to commit
             
-            # Create GitHub repository
+            # Create GitHub repository using API
             repo_name = repo_info["name"] or os.path.basename(self.current_folder)
-            visibility = "--private" if repo_info["visibility"] == "private" else "--public"
             
-            cmd = ["gh", "repo", "create", repo_name, "--source=.", visibility, "--push"]
-            if repo_info["description"]:
-                cmd.extend(["--description", repo_info["description"]])
+            headers = {
+                "Authorization": f"token {self.github_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
             
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            QMessageBox.information(self, "Success", f"Repository created successfully!\n{result.stdout}")
+            data = {
+                "name": repo_name,
+                "private": repo_info["visibility"] == "private",
+                "description": repo_info["description"] or ""
+            }
             
-        except subprocess.CalledProcessError as e:
-            QMessageBox.critical(self, "Error", f"Failed to create repository: {e.stderr}")
+            response = requests.post(
+                "https://api.github.com/user/repos",
+                json=data,
+                headers=headers
+            )
+            
+            if response.status_code == 201:
+                repo_data = response.json()
+                repo_url = repo_data["html_url"]
+                clone_url = repo_data["clone_url"]
+                
+                # Add remote and push
+                if not repo.remotes:
+                    origin = repo.create_remote("origin", clone_url)
+                else:
+                    origin = repo.remote("origin")
+                    origin.set_url(clone_url)
+                
+                origin.push()
+                
+                QMessageBox.information(
+                    self, 
+                    "Success", 
+                    f"Repository created successfully!\n\n"
+                    f"Name: {repo_name}\n"
+                    f"URL: {repo_url}\n"
+                    f"Code pushed to GitHub."
+                )
+            else:
+                error_msg = response.json().get("message", "Unknown error")
+                QMessageBox.critical(self, "Error", f"Failed to create repository: {error_msg}")
+            
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Unexpected error: {str(e)}")
     
@@ -506,18 +644,20 @@ class GitHubRepoTool(QMainWindow):
         
         try:
             repo = git.Repo(self.current_folder)
-            remote_url = next(repo.remote().urls)
-            if 'github.com' in remote_url:
-                # Convert SSH to HTTPS if needed
-                if remote_url.startswith('git@'):
-                    remote_url = remote_url.replace('git@github.com:', 'https://github.com/').replace('.git', '')
+            if repo.remotes:
+                remote_url = next(repo.remote().urls)
+                if 'github.com' in remote_url:
+                    # Convert SSH to HTTPS if needed
+                    if remote_url.startswith('git@'):
+                        remote_url = remote_url.replace('git@github.com:', 'https://github.com/').replace('.git', '')
+                    else:
+                        remote_url = remote_url.replace('.git', '')
+                    
+                    webbrowser.open(remote_url)
                 else:
-                    remote_url = remote_url.replace('.git', '')
-                
-                import webbrowser
-                webbrowser.open(remote_url)
+                    QMessageBox.information(self, "Info", "No GitHub remote found for this repository.")
             else:
-                QMessageBox.information(self, "Info", "No GitHub remote found for this repository.")
+                QMessageBox.information(self, "Info", "No remote configured for this repository.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not open GitHub: {str(e)}")
     
@@ -566,21 +706,22 @@ class GitHubRepoTool(QMainWindow):
     
     def show_about(self):
         """Show about dialog"""
-        about_text = """GitHub Repository Tool v1.0
+        about_text = """GitHub Repository Tool v2.0
 
-A professional PySide6-based tool for creating and managing GitHub repositories.
+A self-contained PySide6-based tool for creating and managing GitHub repositories.
 
 Features:
 • Initialize Git repositories
 • Add and commit files
 • Push/pull from GitHub
-• Create GitHub repositories
+• Create GitHub repositories via API
 • View detailed Git status
 • Professional dark theme interface
+• No external CLI dependencies required
 
 Requirements:
-• Git installed and configured
-• GitHub CLI (gh) installed and authenticated
+• Python with GitPython and requests libraries
+• GitHub Personal Access Token
 
 Keyboard shortcuts:
 • Ctrl+O: Browse folder
@@ -590,20 +731,6 @@ Keyboard shortcuts:
 
 def main():
     """Main entry point"""
-    # Check dependencies
-    try:
-        subprocess.run(["git", "--version"], check=True, capture_output=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print("❌ Error: Git is not installed or not in PATH")
-        return 1
-    
-    try:
-        subprocess.run(["gh", "--version"], check=True, capture_output=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print("❌ Error: GitHub CLI (gh) is not installed or not in PATH")
-        print("Install from: https://cli.github.com/")
-        return 1
-    
     # Launch GUI
     app = QApplication(sys.argv)
     app.setApplicationName("GitHub Repository Tool")
