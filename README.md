@@ -54,7 +54,7 @@ pip install pillow questionary InquirerPy textual
 When you run the program without arguments, it will detect your environment and ask you to choose:
 
 ```bash
-python GitHubRepoSetup.py
+python github_repo_tool.py
 ```
 
 **Example Output:**
@@ -83,7 +83,7 @@ Enter your choice (1-3):
 Run the program without arguments to launch the GUI:
 
 ```bash
-python GitHubRepoSetup.py
+python github_repo_tool.py
 ```
 
 **GUI Features:**
@@ -113,22 +113,22 @@ Use the program directly from the command line:
 
 ```bash
 # Basic usage - create public repository
-python GitHubRepoSetup.py /path/to/your/project
+python github_repo_tool.py /path/to/your/project
 
 # Create private repository
-python GitHubRepoSetup.py /path/to/your/project --private
+python github_repo_tool.py /path/to/your/project --private
 
 # Add description
-python GitHubRepoSetup.py /path/to/your/project --description "My awesome project"
+python github_repo_tool.py /path/to/your/project --description "My awesome project"
 
 # Create without pushing (just create the repo)
-python GitHubRepoSetup.py /path/to/your/project --no-push
+python github_repo_tool.py /path/to/your/project --no-push
 
 # Force GUI mode even with folder argument
-python GitHubRepoSetup.py /path/to/your/project --gui
+python github_repo_tool.py /path/to/your/project --gui
 
 # Force CLI mode
-python GitHubRepoSetup.py --cli /path/to/your/project
+python github_repo_tool.py --cli /path/to/your/project
 ```
 
 ### Command Line Options
@@ -148,22 +148,22 @@ python GitHubRepoSetup.py --cli /path/to/your/project
 cd /path/to/my-project
 
 # Interactive mode - choose GUI or CLI
-python GitHubRepoSetup.py
+python github_repo_tool.py
 
 # Or force CLI mode
-python GitHubRepoSetup.py .
+python github_repo_tool.py .
 
 # Or force GUI mode
-python GitHubRepoSetup.py --gui
+python github_repo_tool.py --gui
 ```
 
 ### Advanced Usage
 ```bash
 # Create a private repository with description
-python GitHubRepoSetup.py ./my-secret-project --private --description "Internal tools and scripts"
+python github_repo_tool.py ./my-secret-project --private --description "Internal tools and scripts"
 
 # Create repository without pushing (useful for existing repos)
-python GitHubRepoSetup.py ./existing-project --no-push
+python github_repo_tool.py ./existing-project --no-push
 ```
 
 ## Program Flow
