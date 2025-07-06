@@ -42,6 +42,11 @@ pip install -r requirements.txt
 gh auth login
 ```
 
+4. Install optional dependencies:
+```bash
+pip install pillow questionary InquirerPy textual
+```
+
 ## Usage
 
 ### Interactive Mode Selection

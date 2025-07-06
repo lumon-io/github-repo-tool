@@ -39,6 +39,16 @@ try:
 except ImportError:
     INQUIRERPY_AVAILABLE = False
 
+# Add Textual for TUI file explorer
+try:
+    from textual.app import App, ComposeResult
+    from textual.widgets import DirectoryTree, Footer, Header, Button, Static, Input
+    from textual.containers import Container, Horizontal
+    from textual.reactive import reactive
+    TEXTUAL_AVAILABLE = True
+except ImportError:
+    TEXTUAL_AVAILABLE = False
+
 class GitHubRepoSetup:
     def __init__(self):
         self.root: Optional[tk.Tk] = None
@@ -58,7 +68,7 @@ class GitHubRepoSetup:
         """Apply Mac-like styling to the application"""
         if not self.root:
             return
-            
+        
         # Configure colors
         self.colors = {
             'bg': '#f5f5f7',           # Light gray background
@@ -127,53 +137,44 @@ class GitHubRepoSetup:
         """Get comprehensive Git status for a path"""
         if not path or not os.path.isdir(path):
             return "⚠️ Please select a valid folder."
-            
         try:
             repo = git.Repo(path)
-            
             # Basic info
             status_info = []
             status_info.append("✅ Git repository found")
-            
             # Branch info
             try:
                 branch = repo.active_branch.name
                 status_info.append(f"🌿 Current branch: {branch}")
-            except:
+            except Exception:
                 status_info.append("🌿 No active branch (detached HEAD)")
-            
             # Remote info
             if repo.remotes:
                 remote_url = next(repo.remote().urls)
                 status_info.append(f"🌐 Remote: {remote_url}")
             else:
                 status_info.append("🌐 No remote configured")
-            
             # Last commit
             try:
                 last_commit = datetime.fromtimestamp(repo.head.commit.committed_date).strftime('%Y-%m-%d %H:%M:%S')
                 status_info.append(f"📅 Last commit: {last_commit}")
                 status_info.append(f"📝 Message: {repo.head.commit.message.strip()}")
-            except:
+            except Exception:
                 status_info.append("📅 No commits yet")
-            
             # Working directory status
             try:
                 # Check for uncommitted changes
                 if repo.is_dirty():
                     status_info.append("⚠️ Working directory has uncommitted changes")
-                    
                     # Show modified files
                     modified_files = [item.a_path for item in repo.index.diff(None)]
                     untracked_files = repo.untracked_files
-                    
                     if modified_files:
                         status_info.append(f"📝 Modified files: {len(modified_files)}")
                     if untracked_files:
                         status_info.append(f"🆕 Untracked files: {len(untracked_files)}")
                 else:
                     status_info.append("✅ Working directory is clean")
-                    
                 # Check if behind/ahead of remote
                 if repo.remotes:
                     try:
@@ -181,26 +182,21 @@ class GitHubRepoSetup:
                         remote.fetch()
                         local_commit = repo.head.commit
                         remote_commit = remote.refs[0].commit
-                        
                         if local_commit != remote_commit:
                             # Count commits ahead/behind
                             ahead = len(list(repo.iter_commits(f'{local_commit}..{remote_commit}')))
                             behind = len(list(repo.iter_commits(f'{remote_commit}..{local_commit}')))
-                            
                             if ahead > 0:
                                 status_info.append(f"⬆️ {ahead} commits ahead of remote")
                             if behind > 0:
                                 status_info.append(f"⬇️ {behind} commits behind remote")
                         else:
                             status_info.append("✅ Up to date with remote")
-                    except:
+                    except Exception:
                         status_info.append("ℹ️ Could not check remote status")
-                        
             except Exception as e:
                 status_info.append(f"⚠️ Error checking status: {str(e)}")
-                
             return "\n".join(status_info)
-            
         except git.exc.InvalidGitRepositoryError:
             return "⚠️ Not a Git repository.\n💡 Click 'Initialize Git' to start."
         except Exception as e:
@@ -210,29 +206,23 @@ class GitHubRepoSetup:
         """Get detailed file status for display in text widget"""
         if not path or not os.path.isdir(path):
             return "No folder selected."
-            
         try:
             repo = git.Repo(path)
             status_text = []
-            
             # Working directory status
             if repo.is_dirty():
                 status_text.append("=== MODIFIED FILES ===")
                 for item in repo.index.diff(None):
                     status_text.append(f"📝 {item.a_path}")
-                
                 status_text.append("\n=== UNTRACKED FILES ===")
                 for file in repo.untracked_files:
                     status_text.append(f"🆕 {file}")
-                    
                 status_text.append("\n=== STAGED FILES ===")
                 for item in repo.index.diff('HEAD'):
                     status_text.append(f"✅ {item.a_path}")
             else:
                 status_text.append("✅ Working directory is clean")
-                
             return "\n".join(status_text)
-            
         except git.exc.InvalidGitRepositoryError:
             return "Not a Git repository."
         except Exception as e:
@@ -244,11 +234,9 @@ class GitHubRepoSetup:
             repo = git.Repo(repo_path)
             if not repo.remotes:
                 return {"error": "No remote configured"}
-            
             remote_url = next(repo.remote().urls)
             if 'github.com' not in remote_url:
                 return {"error": "Not a GitHub repository"}
-            
             # Extract owner and repo name from URL
             if remote_url.startswith('git@'):
                 # SSH format: git@github.com:owner/repo.git
@@ -256,30 +244,22 @@ class GitHubRepoSetup:
             else:
                 # HTTPS format: https://github.com/owner/repo.git
                 parts = remote_url.replace('https://github.com/', '').replace('.git', '').split('/')
-            
             if len(parts) != 2:
                 return {"error": "Invalid GitHub URL format"}
-            
             owner, repo_name = parts
-            
             # Get GitHub token from environment or config
             token = os.getenv('GITHUB_TOKEN') or self.get_github_token()
-            
             if not token:
                 return {"error": "GitHub token not configured"}
-            
             # Fetch repository data from GitHub API
             headers = {
                 'Authorization': f'token {token}',
                 'Accept': 'application/vnd.github.v3+json'
             }
-            
             api_url = f"https://api.github.com/repos/{owner}/{repo_name}"
             response = requests.get(api_url, headers=headers)
-            
             if response.status_code == 200:
                 repo_data = response.json()
-                
                 # Get recent commits
                 commits_url = f"{api_url}/commits"
                 commits_response = requests.get(commits_url, headers=headers)
@@ -293,7 +273,6 @@ class GitHubRepoSetup:
                             'author': commit['commit']['author']['name'],
                             'date': commit['commit']['author']['date']
                         })
-                
                 # Get pull requests
                 prs_url = f"{api_url}/pulls"
                 prs_response = requests.get(prs_url, headers=headers)
@@ -307,7 +286,6 @@ class GitHubRepoSetup:
                             'state': pr['state'],
                             'user': pr['user']['login']
                         })
-                
                 # Get issues
                 issues_url = f"{api_url}/issues"
                 issues_response = requests.get(issues_url, headers=headers)
@@ -321,7 +299,6 @@ class GitHubRepoSetup:
                             'state': issue['state'],
                             'user': issue['user']['login']
                         })
-                
                 return {
                     'name': repo_data['name'],
                     'full_name': repo_data['full_name'],
@@ -340,7 +317,6 @@ class GitHubRepoSetup:
                 }
             else:
                 return {"error": f"Failed to fetch repository data: {response.status_code}"}
-                
         except Exception as e:
             return {"error": f"Error fetching GitHub data: {str(e)}"}
 
@@ -350,24 +326,21 @@ class GitHubRepoSetup:
         token = os.getenv('GITHUB_TOKEN')
         if token:
             return token
-        
         # Try GitHub CLI config
         try:
             result = subprocess.run(['gh', 'auth', 'token'], 
                                   capture_output=True, text=True, check=True)
             return result.stdout.strip()
-        except:
+        except Exception:
             pass
-        
         # Try git config
         try:
             result = subprocess.run(['git', 'config', '--global', 'github.token'], 
                                   capture_output=True, text=True)
             if result.returncode == 0:
                 return result.stdout.strip()
-        except:
+        except Exception:
             pass
-        
         return None
 
     def show_github_details(self):
@@ -378,7 +351,6 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder first.")
             return
-        
         # Show loading message
         loading_window = tk.Toplevel(self.root)
         loading_window.title("Loading GitHub Data")
@@ -386,56 +358,45 @@ class GitHubRepoSetup:
         loading_window.configure(bg=self.colors['bg'])
         loading_window.transient(self.root)
         loading_window.grab_set()
-        
         loading_label = tk.Label(loading_window, text="Fetching GitHub data...", 
                                font=("SF Pro Display", 12), 
                                fg=self.colors['text'], bg=self.colors['bg'])
         loading_label.pack(expand=True)
-        
         def fetch_data():
             try:
                 repo_info = self.get_github_repo_info(folder)
-                
                 # Update UI in main thread
                 if self.root:
                     self.root.after(0, lambda: show_github_window(repo_info))
-                
             except Exception as e:
                 if self.root:
                     self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to fetch GitHub data: {str(e)}"))
             finally:
                 if self.root:
                     self.root.after(0, loading_window.destroy)
-        
         def show_github_window(repo_info):
             if 'error' in repo_info:
                 messagebox.showerror("GitHub Error", repo_info['error'])
                 return
-            
             # Create detailed GitHub window
             github_window = tk.Toplevel(self.root)
             github_window.title(f"GitHub: {repo_info['full_name']}")
             github_window.geometry("800x600")
             github_window.configure(bg=self.colors['bg'])
-            
             # Create notebook for tabs
             notebook = ttk.Notebook(github_window)
             notebook.pack(fill="both", expand=True, padx=10, pady=10)
-            
             # Overview tab
             overview_frame = ttk.Frame(notebook)
             notebook.add(overview_frame, text="Overview")
-            
             overview_text = tk.Text(overview_frame, wrap=tk.WORD, 
                                   font=("SF Mono", 10),
                                   bg='white', fg=self.colors['text'])
             overview_scrollbar = ttk.Scrollbar(overview_frame, orient="vertical", 
                                              command=overview_text.yview)
             overview_text.configure(yscrollcommand=overview_scrollbar.set)
-            
             overview_text.pack(side="left", fill="both", expand=True)
             overview_scrollbar.pack(side="right", fill="y")
-            
             # Format overview data
             overview_data = f"""🚀 GitHub Repository: {repo_info['full_name']}
 
@@ -453,75 +414,59 @@ class GitHubRepoSetup:
 """
             overview_text.insert("1.0", overview_data)
             overview_text.config(state="disabled")
-            
             # Recent commits tab
             commits_frame = ttk.Frame(notebook)
             notebook.add(commits_frame, text="Recent Commits")
-            
             commits_text = tk.Text(commits_frame, wrap=tk.WORD, 
                                  font=("SF Mono", 10),
                                  bg='white', fg=self.colors['text'])
             commits_scrollbar = ttk.Scrollbar(commits_frame, orient="vertical", 
                                             command=commits_text.yview)
             commits_text.configure(yscrollcommand=commits_scrollbar.set)
-            
             commits_text.pack(side="left", fill="both", expand=True)
             commits_scrollbar.pack(side="right", fill="y")
-            
             commits_data = "📝 Recent Commits:\n\n"
             for commit in repo_info['recent_commits']:
                 commits_data += f"🔸 {commit['sha']} - {commit['message']}\n"
                 commits_data += f"   👤 {commit['author']} - {commit['date']}\n\n"
-            
             commits_text.insert("1.0", commits_data)
             commits_text.config(state="disabled")
-            
             # Pull requests tab
             prs_frame = ttk.Frame(notebook)
             notebook.add(prs_frame, text="Pull Requests")
-            
             prs_text = tk.Text(prs_frame, wrap=tk.WORD, 
                              font=("SF Mono", 10),
                              bg='white', fg=self.colors['text'])
             prs_scrollbar = ttk.Scrollbar(prs_frame, orient="vertical", 
                                          command=prs_text.yview)
             prs_text.configure(yscrollcommand=prs_scrollbar.set)
-            
             prs_text.pack(side="left", fill="both", expand=True)
             prs_scrollbar.pack(side="right", fill="y")
-            
             prs_data = "🔀 Pull Requests:\n\n"
             for pr in repo_info['pull_requests']:
                 status_emoji = "🟢" if pr['state'] == 'open' else "🔴"
                 prs_data += f"{status_emoji} #{pr['number']} - {pr['title']}\n"
                 prs_data += f"   👤 {pr['user']} - {pr['state']}\n\n"
-            
             prs_text.insert("1.0", prs_data)
             prs_text.config(state="disabled")
-            
             # Issues tab
             issues_frame = ttk.Frame(notebook)
             notebook.add(issues_frame, text="Issues")
-            
             issues_text = tk.Text(issues_frame, wrap=tk.WORD, 
                                 font=("SF Mono", 10),
                                 bg='white', fg=self.colors['text'])
             issues_scrollbar = ttk.Scrollbar(issues_frame, orient="vertical", 
                                            command=issues_text.yview)
             issues_text.configure(yscrollcommand=issues_scrollbar.set)
-            
             issues_text.pack(side="left", fill="both", expand=True)
             issues_scrollbar.pack(side="right", fill="y")
-            
             issues_data = "🐛 Issues:\n\n"
             for issue in repo_info['issues']:
                 status_emoji = "🟢" if issue['state'] == 'open' else "🔴"
                 issues_data += f"{status_emoji} #{issue['number']} - {issue['title']}\n"
                 issues_data += f"   👤 {issue['user']} - {issue['state']}\n\n"
-            
             issues_text.insert("1.0", issues_data)
             issues_text.config(state="disabled")
-        
         # Run in background thread
         threading.Thread(target=fetch_data, daemon=True).start()
 
@@ -529,28 +474,23 @@ class GitHubRepoSetup:
         """Configure GitHub token via UI"""
         if not self.github_token_var:
             return
-            
         # Create token configuration window
         token_window = tk.Toplevel(self.root)
         token_window.title("Configure GitHub Token")
         token_window.geometry("500x300")
         token_window.configure(bg=self.colors['bg'])
         token_window.resizable(False, False)
-        
         # Center the window
         token_window.transient(self.root)
         token_window.grab_set()
-        
         # Main frame
         main_frame = ttk.Frame(token_window, style='Mac.TFrame')
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
         # Title
         title_label = tk.Label(main_frame, text="GitHub Token Configuration", 
                              font=("SF Pro Display", 16, "bold"), 
                              fg=self.colors['text'], bg=self.colors['bg'])
         title_label.pack(pady=(0, 10))
-        
         # Instructions
         instructions = tk.Label(main_frame, 
                               text="Enter your GitHub Personal Access Token.\nThis is required for detailed GitHub data.", 
@@ -558,29 +498,23 @@ class GitHubRepoSetup:
                               fg=self.colors['text_secondary'], bg=self.colors['bg'],
                               justify=tk.CENTER)
         instructions.pack(pady=(0, 20))
-        
         # Token entry
         token_frame = ttk.Frame(main_frame)
         token_frame.pack(fill="x", pady=5)
-        
         ttk.Label(token_frame, text="GitHub Token:", style='Mac.TLabel').pack(anchor="w")
         token_entry = ttk.Entry(token_frame, textvariable=self.github_token_var, 
                               style='Mac.TEntry', width=50, show="*")
         token_entry.pack(fill="x", pady=2)
-        
         # Buttons
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill="x", pady=20)
-        
         def save_token():
             if not self.github_token_var:
                 return
             token = self.github_token_var.get()
-            
             if not token:
                 messagebox.showerror("Error", "Please enter a GitHub token.")
                 return
-                
             try:
                 # Test the token by making a simple API call
                 headers = {
@@ -588,27 +522,21 @@ class GitHubRepoSetup:
                     'Accept': 'application/vnd.github.v3+json'
                 }
                 response = requests.get('https://api.github.com/user', headers=headers)
-                
                 if response.status_code == 200:
                     user_data = response.json()
                     messagebox.showinfo("Success", f"✅ GitHub token configured successfully!\nAuthenticated as: {user_data['login']}")
                     token_window.destroy()
                 else:
                     messagebox.showerror("Error", "Invalid GitHub token. Please check your token and try again.")
-                    
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to validate token: {str(e)}")
-        
         def cancel():
             token_window.destroy()
-        
         save_btn = ttk.Button(button_frame, text="Save", command=save_token, 
                              style='Mac.TButton')
         save_btn.pack(side="right", padx=(5, 0))
-        
         cancel_btn = ttk.Button(button_frame, text="Cancel", command=cancel)
         cancel_btn.pack(side="right")
-        
         # Load current token if available
         current_token = self.get_github_token()
         if current_token:
@@ -618,95 +546,76 @@ class GitHubRepoSetup:
         """Configure Git credentials via UI"""
         if not self.git_username_var or not self.git_email_var:
             return
-            
         # Create credential configuration window
         cred_window = tk.Toplevel(self.root)
         cred_window.title("Configure Git Credentials")
         cred_window.geometry("400x300")
         cred_window.configure(bg=self.colors['bg'])
         cred_window.resizable(False, False)
-        
         # Center the window
         cred_window.transient(self.root)
         cred_window.grab_set()
-        
         # Main frame
         main_frame = ttk.Frame(cred_window, style='Mac.TFrame')
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
         # Title
         title_label = tk.Label(main_frame, text="Git Configuration", 
                              font=("SF Pro Display", 16, "bold"), 
                              fg=self.colors['text'], bg=self.colors['bg'])
         title_label.pack(pady=(0, 20))
-        
         # Username
         username_frame = ttk.Frame(main_frame)
         username_frame.pack(fill="x", pady=5)
-        
         ttk.Label(username_frame, text="Username:", style='Mac.TLabel').pack(anchor="w")
         username_entry = ttk.Entry(username_frame, textvariable=self.git_username_var, 
                                  style='Mac.TEntry', width=30)
         username_entry.pack(fill="x", pady=2)
-        
         # Email
         email_frame = ttk.Frame(main_frame)
         email_frame.pack(fill="x", pady=5)
-        
         ttk.Label(email_frame, text="Email:", style='Mac.TLabel').pack(anchor="w")
         email_entry = ttk.Entry(email_frame, textvariable=self.git_email_var, 
                               style='Mac.TEntry', width=30)
         email_entry.pack(fill="x", pady=2)
-        
         # Buttons
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill="x", pady=20)
-        
         def save_credentials():
             if not self.git_username_var or not self.git_email_var:
                 return
             username = self.git_username_var.get()
             email = self.git_email_var.get()
-            
             if not username or not email:
                 messagebox.showerror("Error", "Please enter both username and email.")
                 return
-                
             try:
                 # Configure Git globally
                 subprocess.run(["git", "config", "--global", "user.name", username], 
                              check=True, capture_output=True)
                 subprocess.run(["git", "config", "--global", "user.email", email], 
                              check=True, capture_output=True)
-                
                 messagebox.showinfo("Success", "✅ Git credentials configured successfully!")
                 cred_window.destroy()
-                
             except subprocess.CalledProcessError as e:
                 messagebox.showerror("Error", f"Failed to configure Git: {e}")
-        
         def cancel():
             cred_window.destroy()
-        
         save_btn = ttk.Button(button_frame, text="Save", command=save_credentials, 
                              style='Mac.TButton')
         save_btn.pack(side="right", padx=(5, 0))
-        
         cancel_btn = ttk.Button(button_frame, text="Cancel", command=cancel)
         cancel_btn.pack(side="right")
-        
         # Load current values
         try:
             username_result = subprocess.run(["git", "config", "--global", "user.name"], 
                                           capture_output=True, text=True)
             if username_result.returncode == 0:
                 self.git_username_var.set(username_result.stdout.strip())
-                
             email_result = subprocess.run(["git", "config", "--global", "user.email"], 
                                         capture_output=True, text=True)
             if email_result.returncode == 0:
                 self.git_email_var.set(email_result.stdout.strip())
-        except:
+        except Exception:
             pass
 
     def initialize_git(self):
@@ -717,7 +626,6 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder.")
             return
-
         try:
             os.chdir(folder)
             subprocess.run(["git", "init"], check=True, capture_output=True)
@@ -734,7 +642,6 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder.")
             return
-
         try:
             os.chdir(folder)
             result = subprocess.run(["git", "pull"], capture_output=True, text=True, check=True)
@@ -751,7 +658,6 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder.")
             return
-
         try:
             os.chdir(folder)
             result = subprocess.run(["git", "push"], capture_output=True, text=True, check=True)
@@ -768,7 +674,6 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder.")
             return
-
         try:
             os.chdir(folder)
             subprocess.run(["git", "add", "."], check=True, capture_output=True)
@@ -785,12 +690,10 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder.")
             return
-
         # Get commit message from user
         commit_msg = simpledialog.askstring("Commit Message", "Enter commit message:")
         if not commit_msg:
             return
-
         try:
             os.chdir(folder)
             subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
@@ -807,29 +710,23 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder.")
             return
-
         try:
             os.chdir(folder)
             result = subprocess.run(["git", "status"], capture_output=True, text=True, check=True)
-            
             # Create a new window to show status
             status_window = tk.Toplevel(self.root)
             status_window.title("Git Status")
             status_window.geometry("600x400")
             status_window.configure(bg=self.colors['bg'])
-            
             text_widget = tk.Text(status_window, wrap=tk.WORD, 
                                 bg='white', fg=self.colors['text'],
                                 font=('SF Mono', 10))
             scrollbar = ttk.Scrollbar(status_window, orient="vertical", command=text_widget.yview)
             text_widget.configure(yscrollcommand=scrollbar.set)
-            
             text_widget.pack(side="left", fill="both", expand=True, padx=10, pady=10)
             scrollbar.pack(side="right", fill="y", pady=10)
-            
             text_widget.insert("1.0", result.stdout)
             text_widget.config(state="disabled")
-            
         except subprocess.CalledProcessError as e:
             messagebox.showerror("Error", f"Failed to get status: {e}")
 
@@ -837,19 +734,15 @@ class GitHubRepoSetup:
         """Create GitHub repository and push code"""
         if not self.folder_var or not self.visibility_var or not self.description_var or not self.progress_bar or not self.root:
             return
-            
         folder = self.folder_var.get()
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder.")
             return
-
         # Show progress
         self.progress_bar.start()
-        
         def run_operation():
             try:
                 os.chdir(folder)
-                
                 # Check if Git is initialized
                 try:
                     repo = git.Repo(folder)
@@ -858,34 +751,27 @@ class GitHubRepoSetup:
                     subprocess.run(["git", "init"], check=True, capture_output=True)
                     repo = git.Repo(folder)
                     is_git_repo = False
-
                 # Add all files
                 repo.git.add(A=True)
-                
                 # Commit if there are changes
                 try:
                     commit_message = "Initial commit" if not is_git_repo else "Update repository"
                     repo.index.commit(commit_message)
                 except git.exc.GitCommandError:
                     pass  # No changes to commit
-
                 # Create GitHub repository
                 repo_name = os.path.basename(folder)
                 if not self.visibility_var or not self.description_var:
                     return
                 visibility = "--public" if self.visibility_var.get() == "Public" else "--private"
                 description = self.description_var.get()
-                
                 gh_cmd = ["gh", "repo", "create", repo_name, "--source=.", visibility, "--push"]
                 if description:
                     gh_cmd.extend(["--description", description])
-                
                 result = subprocess.run(gh_cmd, capture_output=True, text=True, check=True)
-                
                 # Update UI in main thread
                 if self.root:
                     self.root.after(0, lambda: self.show_success(result.stdout))
-                
             except subprocess.CalledProcessError as e:
                 if self.root:
                     self.root.after(0, lambda: self.show_error(f"GitHub Error: {e.stderr}"))
@@ -896,7 +782,6 @@ class GitHubRepoSetup:
                 if self.root and self.progress_bar:
                     self.root.after(0, self.progress_bar.stop)
                     self.root.after(0, self.update_status)
-
         # Run in background thread
         threading.Thread(target=run_operation, daemon=True).start()
 
@@ -914,7 +799,6 @@ class GitHubRepoSetup:
             return
         status = self.get_detailed_git_status(self.folder_var.get())
         self.status_label.config(text=status)
-        
         # Update file status in text widget
         file_status = self.get_file_status(self.folder_var.get())
         self.status_text.config(state="normal")
@@ -947,7 +831,6 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder first.")
             return
-            
         try:
             repo = git.Repo(folder)
             remote_url = next(repo.remote().urls)
@@ -1352,9 +1235,100 @@ def prompt_user_mode():
                 print("\n👋 Goodbye!")
                 return "exit"
 
+def pick_folder_textual():
+    """Launch a Textual TUI folder picker and return the selected folder path."""
+    from textual.app import App, ComposeResult
+    from textual.widgets import DirectoryTree, Footer, Header, Button, Static, Input
+    from textual.containers import Container, Horizontal
+    from textual.reactive import reactive
+
+    class FolderPickerApp(App):
+        CSS = '''
+        #main-container { padding: 1 2; }
+        #current-path { color: cyan; padding: 0 1; }
+        #error-msg { color: red; padding: 0 1; }
+        #input-row { padding: 1 0; }
+        #button-row { padding: 1 0; }
+        '''
+        selected_folder = reactive(None)
+        error_message = reactive("")
+        def __init__(self):
+            super().__init__()
+            self.current_root = os.path.abspath(os.sep)
+        def compose(self) -> ComposeResult:
+            yield Header()
+            with Container(id="main-container"):
+                yield Static(f"Current: {self.current_root}", id="current-path")
+                yield Static("", id="error-msg")
+                with Horizontal(id="input-row"):
+                    yield Input(placeholder="Type or paste a path and press Enter", id="path-input")
+                    yield Button("Go Home", id="home-btn")
+                yield DirectoryTree(self.current_root, id="tree")
+                with Horizontal(id="button-row"):
+                    yield Button("⬆️ Go Up", id="up-btn")
+                    yield Button("Select", id="select-btn")
+            yield Footer()
+        def on_mount(self):
+            self.update_path_label()
+            self.query_one("#path-input", Input).value = self.current_root
+        def update_path_label(self):
+            label = self.query_one("#current-path", Static)
+            label.update(f"Current: {self.current_root}")
+        def show_error(self, msg):
+            self.error_message = msg
+            self.query_one("#error-msg", Static).update(msg)
+        def clear_error(self):
+            self.error_message = ""
+            self.query_one("#error-msg", Static).update("")
+        def reload_tree(self, new_root):
+            self.current_root = new_root
+            container = self.query_one("#main-container", Container)
+            old_tree = self.query_one("#tree", DirectoryTree)
+            container.remove(old_tree)
+            new_tree = DirectoryTree(new_root, id="tree")
+            container.mount(new_tree, after="#input-row")
+            self.update_path_label()
+            self.query_one("#path-input", Input).value = new_root
+            self.clear_error()
+        def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected):
+            if os.path.isdir(event.path):
+                self.selected_folder = event.path
+                self.exit(event.path)
+        def on_button_pressed(self, event):
+            if event.button.id == "up-btn":
+                parent = os.path.dirname(self.current_root)
+                if parent and parent != self.current_root:
+                    self.reload_tree(parent)
+            elif event.button.id == "home-btn":
+                home = os.path.expanduser("~")
+                if os.path.isdir(home):
+                    self.reload_tree(home)
+            elif event.button.id == "select-btn":
+                tree = self.query_one("#tree", DirectoryTree)
+                node = tree.cursor_node
+                if node and os.path.isdir(node.path):
+                    self.selected_folder = node.path
+                    self.exit(node.path)
+        def on_input_submitted(self, event: Input.Submitted):
+            path = event.value.strip()
+            if os.path.isdir(path):
+                self.reload_tree(path)
+            else:
+                self.show_error(f"❌ '{path}' is not a valid directory.")
+    app = FolderPickerApp()
+    folder = app.run()
+    return folder
+
 def prompt_for_folder_cli():
-    """Prompt the user for a folder path in CLI mode using InquirerPy's file browser if available."""
-    if INQUIRERPY_AVAILABLE:
+    """Prompt the user for a folder path in CLI mode using Textual's file browser if available."""
+    if TEXTUAL_AVAILABLE:
+        folder = pick_folder_textual()
+        if folder and os.path.isdir(folder):
+            return folder
+        else:
+            print("❌ No folder selected or invalid directory. Please try again.")
+            return prompt_for_folder_cli()
+    elif INQUIRERPY_AVAILABLE:
         while True:
             folder = inquirerpy_inquirer.filepath(
                 message="Select your project folder:",
