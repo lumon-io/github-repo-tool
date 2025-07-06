@@ -39,15 +39,28 @@ try:
 except ImportError:
     INQUIRERPY_AVAILABLE = False
 
-# Add Textual for TUI file explorer
-try:
-    from textual.app import App, ComposeResult
-    from textual.widgets import DirectoryTree, Footer, Header, Button, Static, Input
-    from textual.containers import Container, Horizontal
-    from textual.reactive import reactive
-    TEXTUAL_AVAILABLE = True
-except ImportError:
-    TEXTUAL_AVAILABLE = False
+# Shared function for both CLI and GUI
+
+def compare_local_remote(repo):
+    """Compare local and remote repo and return status: 'ahead', 'behind', 'diverged', 'up_to_date'."""
+    try:
+        remote = repo.remote()
+        remote.fetch()
+        local_commit = repo.head.commit
+        remote_commit = remote.refs[0].commit
+        if local_commit == remote_commit:
+            return 'up_to_date'
+        ahead = list(repo.iter_commits(f'{remote_commit}..{local_commit}'))
+        behind = list(repo.iter_commits(f'{local_commit}..{remote_commit}'))
+        if ahead and not behind:
+            return 'ahead'
+        if behind and not ahead:
+            return 'behind'
+        if ahead and behind:
+            return 'diverged'
+        return 'unknown'
+    except Exception:
+        return 'unknown'
 
 class GitHubRepoSetup:
     def __init__(self):
@@ -738,12 +751,10 @@ class GitHubRepoSetup:
         if not folder or not os.path.isdir(folder):
             messagebox.showerror("Error", "Please select a valid folder.")
             return
-        # Show progress
         self.progress_bar.start()
         def run_operation():
             try:
                 os.chdir(folder)
-                # Check if Git is initialized
                 try:
                     repo = git.Repo(folder)
                     is_git_repo = True
@@ -751,15 +762,12 @@ class GitHubRepoSetup:
                     subprocess.run(["git", "init"], check=True, capture_output=True)
                     repo = git.Repo(folder)
                     is_git_repo = False
-                # Add all files
                 repo.git.add(A=True)
-                # Commit if there are changes
                 try:
                     commit_message = "Initial commit" if not is_git_repo else "Update repository"
                     repo.index.commit(commit_message)
                 except git.exc.GitCommandError:
-                    pass  # No changes to commit
-                # Create GitHub repository
+                    pass
                 repo_name = os.path.basename(folder)
                 if not self.visibility_var or not self.description_var:
                     return
@@ -768,13 +776,45 @@ class GitHubRepoSetup:
                 gh_cmd = ["gh", "repo", "create", repo_name, "--source=.", visibility, "--push"]
                 if description:
                     gh_cmd.extend(["--description", description])
-                result = subprocess.run(gh_cmd, capture_output=True, text=True, check=True)
-                # Update UI in main thread
-                if self.root:
-                    self.root.after(0, lambda: self.show_success(result.stdout))
-            except subprocess.CalledProcessError as e:
-                if self.root:
-                    self.root.after(0, lambda: self.show_error(f"GitHub Error: {e.stderr}"))
+                try:
+                    result = subprocess.run(gh_cmd, capture_output=True, text=True, check=True)
+                    if self.root:
+                        self.root.after(0, lambda: self.show_success(result.stdout))
+                except subprocess.CalledProcessError as e:
+                    err_msg = e.stderr if hasattr(e, 'stderr') else str(e)
+                    if "Name already exists on this account" in err_msg:
+                        status = compare_local_remote(repo)
+                        # Prompt user for action (Tkinter dialog)
+                        prompt = None
+                        if status == 'ahead':
+                            prompt = messagebox.askyesno("Repo Exists", "Local repo is ahead of remote. Push and overwrite remote?")
+                            prompt = "Push (force)" if prompt else "Abort"
+                        elif status == 'behind':
+                            prompt = messagebox.askquestion("Repo Exists", "Remote is newer. Pull first (Yes), push and overwrite (No)?")
+                            prompt = "Pull" if prompt == 'yes' else "Push (force)"
+                        elif status == 'diverged':
+                            prompt = messagebox.askquestion("Repo Exists", "Local and remote have diverged. Pull (Yes), push (force) (No)?")
+                            prompt = "Pull" if prompt == 'yes' else "Push (force)"
+                        elif status == 'up_to_date':
+                            messagebox.showinfo("Repo Exists", "Repo already exists and is up to date.")
+                            return
+                        else:
+                            prompt = messagebox.askyesno("Repo Exists", "Repo exists. Push (force) or abort?")
+                            prompt = "Push (force)" if prompt else "Abort"
+                        if prompt == "Pull":
+                            subprocess.run(["git", "pull"], check=True)
+                            messagebox.showinfo("Success", "Pulled from remote. Please re-run your command if needed.")
+                            return
+                        elif prompt == "Push (force)":
+                            subprocess.run(["git", "push", "--force"], check=True)
+                            messagebox.showinfo("Success", "Force push complete.")
+                            return
+                        else:
+                            messagebox.showinfo("Aborted", "Aborted by user.")
+                            return
+                    else:
+                        if self.root:
+                            self.root.after(0, lambda: self.show_error(f"GitHub Error: {err_msg}"))
             except Exception as e:
                 if self.root:
                     self.root.after(0, lambda: self.show_error(f"Unexpected error: {str(e)}"))
@@ -782,7 +822,6 @@ class GitHubRepoSetup:
                 if self.root and self.progress_bar:
                     self.root.after(0, self.progress_bar.stop)
                     self.root.after(0, self.update_status)
-        # Run in background thread
         threading.Thread(target=run_operation, daemon=True).start()
 
     def show_success(self, message):
@@ -1126,7 +1165,6 @@ def run_command_line(folder_path, visibility="public", description="", push=True
 
     try:
         os.chdir(folder_path)
-        
         # Initialize Git if needed
         try:
             repo = git.Repo(folder_path)
@@ -1136,7 +1174,6 @@ def run_command_line(folder_path, visibility="public", description="", push=True
             subprocess.run(["git", "init"], check=True, capture_output=True)
             repo = git.Repo(folder_path)
             print("✅ Git repository initialized")
-
         # Add and commit files
         repo.git.add(A=True)
         try:
@@ -1145,25 +1182,99 @@ def run_command_line(folder_path, visibility="public", description="", push=True
             print("✅ Files committed")
         except git.exc.GitCommandError:
             print("ℹ️ No changes to commit")
-
         # Create GitHub repository
         repo_name = os.path.basename(folder_path)
         print(f"🐙 Creating GitHub repository '{repo_name}'...")
-        
         gh_cmd = ["gh", "repo", "create", repo_name, "--source=.", f"--{visibility}"]
         if description:
             gh_cmd.extend(["--description", description])
         if push:
             gh_cmd.append("--push")
-        
-        result = subprocess.run(gh_cmd, capture_output=True, text=True, check=True)
-        print("✅ Repository created successfully!")
-        print(result.stdout)
-        return True
-        
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Error: {e.stderr}")
-        return False
+        try:
+            result = subprocess.run(gh_cmd, capture_output=True, text=True, check=True)
+            print("✅ Repository created successfully!")
+            print(result.stdout)
+            return True
+        except subprocess.CalledProcessError as e:
+            err_msg = e.stderr if hasattr(e, 'stderr') else str(e)
+            if "Name already exists on this account" in err_msg:
+                print(f"❌ Error: {err_msg.strip()}")
+                # Compare local and remote
+                status = compare_local_remote(repo)
+                # Prompt user for action
+                prompt = None
+                if INQUIRERPY_AVAILABLE:
+                    if status == 'ahead':
+                        prompt = inquirerpy_inquirer.select(
+                            message="Local repo is ahead of remote. Push and overwrite remote?",
+                            choices=["Push (force)", "Abort"]
+                        ).execute()
+                    elif status == 'behind':
+                        prompt = inquirerpy_inquirer.select(
+                            message="Remote is newer. Pull first or push and overwrite?",
+                            choices=["Pull", "Push (force)", "Abort"]
+                        ).execute()
+                    elif status == 'diverged':
+                        prompt = inquirerpy_inquirer.select(
+                            message="Local and remote have diverged. Pull, push (force), or abort?",
+                            choices=["Pull", "Push (force)", "Abort"]
+                        ).execute()
+                    elif status == 'up_to_date':
+                        print("✅ Repo already exists and is up to date.")
+                        return True
+                    else:
+                        prompt = inquirerpy_inquirer.select(
+                            message="Repo exists. What do you want to do?",
+                            choices=["Push (force)", "Abort"]
+                        ).execute()
+                else:
+                    if status == 'ahead':
+                        prompt = input("Local repo is ahead of remote. Push and overwrite remote? (y/N): ").strip().lower()
+                        if prompt == 'y':
+                            prompt = "Push (force)"
+                        else:
+                            prompt = "Abort"
+                    elif status == 'behind':
+                        prompt = input("Remote is newer. Pull first (p), push and overwrite (f), or abort (a)? [p/f/a]: ").strip().lower()
+                        if prompt == 'p':
+                            prompt = "Pull"
+                        elif prompt == 'f':
+                            prompt = "Push (force)"
+                        else:
+                            prompt = "Abort"
+                    elif status == 'diverged':
+                        prompt = input("Local and remote have diverged. Pull (p), push (force) (f), or abort (a)? [p/f/a]: ").strip().lower()
+                        if prompt == 'p':
+                            prompt = "Pull"
+                        elif prompt == 'f':
+                            prompt = "Push (force)"
+                        else:
+                            prompt = "Abort"
+                    elif status == 'up_to_date':
+                        print("✅ Repo already exists and is up to date.")
+                        return True
+                    else:
+                        prompt = input("Repo exists. Push (force) or abort? (y/N): ").strip().lower()
+                        if prompt == 'y':
+                            prompt = "Push (force)"
+                        else:
+                            prompt = "Abort"
+                if prompt == "Pull":
+                    print("🔄 Pulling from remote...")
+                    subprocess.run(["git", "pull"], check=True)
+                    print("✅ Pulled from remote. Please re-run your command if needed.")
+                    return True
+                elif prompt == "Push (force)":
+                    print("⬆️ Force pushing local repo to remote...")
+                    subprocess.run(["git", "push", "--force"], check=True)
+                    print("✅ Force push complete.")
+                    return True
+                else:
+                    print("❌ Aborted by user.")
+                    return False
+            else:
+                print(f"❌ Error: {err_msg}")
+                return False
     except Exception as e:
         print(f"❌ Unexpected error: {str(e)}")
         return False
@@ -1258,16 +1369,9 @@ def pick_folder_inquirerpy():
             continue
 
 def prompt_for_folder_cli():
-    """Prompt the user for a folder path in CLI mode using InquirerPy if available, then Textual, then questionary/manual as fallback."""
+    """Prompt the user for a folder path in CLI mode using InquirerPy if available, then questionary/manual as fallback."""
     if INQUIRERPY_AVAILABLE:
         return pick_folder_inquirerpy()
-    elif TEXTUAL_AVAILABLE:
-        folder = pick_folder_textual()
-        if folder and os.path.isdir(folder):
-            return folder
-        else:
-            print("❌ No folder selected or invalid directory. Please try again.")
-            return prompt_for_folder_cli()
     elif QUESTIONARY_AVAILABLE:
         while True:
             folder = questionary.path(
