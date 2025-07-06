@@ -290,7 +290,7 @@ class GitHubRepoTool(QMainWindow):
         help_menu.addAction(about_action)
     
     def apply_dark_theme(self):
-        """Apply a modern dark theme"""
+        """Apply a professional dark theme"""
         palette = QPalette()
         palette.setColor(QPalette.Window, QColor(53, 53, 53))
         palette.setColor(QPalette.WindowText, QColor(255, 255, 255))
@@ -568,7 +568,7 @@ class GitHubRepoTool(QMainWindow):
         """Show about dialog"""
         about_text = """GitHub Repository Tool v1.0
 
-A modern PySide6-based tool for creating and managing GitHub repositories.
+A professional PySide6-based tool for creating and managing GitHub repositories.
 
 Features:
 • Initialize Git repositories
@@ -576,7 +576,7 @@ Features:
 • Push/pull from GitHub
 • Create GitHub repositories
 • View detailed Git status
-• Modern dark theme interface
+• Professional dark theme interface
 
 Requirements:
 • Git installed and configured

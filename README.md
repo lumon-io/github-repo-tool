@@ -5,7 +5,7 @@ A polished Python tool to easily create and manage GitHub repositories from loca
 ## Features
 
 - **Dual Mode**: GUI interface or command-line operation
-- **Mac-Style Design**: Beautiful, modern interface with Apple-inspired colors and typography
+- **Modern GUI**: Clean, professional interface with dark theme
 - **Comprehensive Git Management**: Full Git workflow with status, pull, push, commit
 - **Git Credential Management**: Configure username and email via UI
 - **GitHub Token Management**: Configure GitHub Personal Access Token for API access
@@ -59,15 +59,6 @@ python github_repo_tool.py
 
 **Example Output:**
 ```
-    /\\
-   /  \\
-  /____\\
-  |    |
-  |NASA|
-  |    |
- /|    |\\
-/_|____|_\\
-
 🚀 GitHub Repository Setup Tool
 ========================================
 Choose your preferred mode:
@@ -87,7 +78,7 @@ python github_repo_tool.py
 ```
 
 **GUI Features:**
-- **Beautiful Mac-Style Interface**: Apple-inspired design with modern colors and typography
+- **Modern Interface**: Clean, professional design with dark theme
 - Browse and select project folders
 - Choose repository visibility (Public/Private)
 - Add repository descriptions
