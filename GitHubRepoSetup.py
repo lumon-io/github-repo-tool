@@ -1167,12 +1167,12 @@ def run_command_line(folder_path, visibility="public", description="", push=True
         os.chdir(folder_path)
         # Initialize Git if needed
         try:
-            repo = git.Repo(folder_path)
+            repo = git.Repo('.')
             print("✅ Git repository found")
         except git.exc.InvalidGitRepositoryError:
             print("📁 Initializing Git repository...")
             subprocess.run(["git", "init"], check=True, capture_output=True)
-            repo = git.Repo(folder_path)
+            repo = git.Repo('.')
             print("✅ Git repository initialized")
         # Add and commit files
         repo.git.add(A=True)
